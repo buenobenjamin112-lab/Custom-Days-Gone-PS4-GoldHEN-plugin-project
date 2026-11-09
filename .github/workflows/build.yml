@@ -1,12 +1,15 @@
 
-name: Build DaysGoneSpawner
+name: Build Days Gone Plugin
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
 
     steps:
       - name: Baixar projeto
@@ -15,46 +18,43 @@ jobs:
       - name: Instalar dependencias
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang lld llvm make curl jq tar git
+          sudo apt-get install -y build-essential clang llvm lld make git wget
 
       - name: Baixar OpenOrbis
         run: |
-          URL="https://api.github.com/repos/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/tags/v0.5.4"
-          curl -fsSL "$URL" -o release.json
-          DOWNLOAD=$(jq -r '.assets[] | select(.name == "toolchain-llvm-18.tar.gz") | .browser_download_url' release.json)
-
-          test -n "$DOWNLOAD"
-          test "$DOWNLOAD" != "null"
-
-          mkdir -p "$RUNNER_TEMP/oo"
-          curl -fL "$DOWNLOAD" -o toolchain.tar.gz
-          tar -xzf toolchain.tar.gz --strip-components=2 -C "$RUNNER_TEMP/oo"
-
-          echo "OO_PS4_TOOLCHAIN=$RUNNER_TEMP/oo" >> "$GITHUB_ENV"
-          echo "$RUNNER_TEMP/oo/bin/linux" >> "$GITHUB_PATH"
+          git clone --depth 1 https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain.git "$RUNNER_TEMP/OpenOrbis"
+          echo "OO_PS4_TOOLCHAIN=$RUNNER_TEMP/OpenOrbis" >> "$GITHUB_ENV"
 
       - name: Baixar GoldHEN SDK
         run: |
           git clone --depth 1 https://github.com/GoldHEN/GoldHEN_Plugins_SDK.git "$RUNNER_TEMP/GoldHEN_SDK"
           echo "GOLDHEN_SDK=$RUNNER_TEMP/GoldHEN_SDK" >> "$GITHUB_ENV"
-          make -C "$RUNNER_TEMP/GoldHEN_SDK"
 
       - name: Baixar estrutura oficial
         run: |
-          git clone --depth 1 https://github.com/GoldHEN/GoldHEN_Plugins_Repository.git "$RUNNER_TEMP/GoldHEN_Plugins"
+          git clone --depth 1 https://github.com/GoldHEN/GoldHEN_Plugins.git "$RUNNER_TEMP/GoldHEN_Plugins"
 
       - name: Preparar plugin
         run: |
+          set -e
+
           test -f source/main.c
+          test -f source/pad.h
+          test -f source/config.h
 
           ROOT="$RUNNER_TEMP/GoldHEN_Plugins"
           TEMPLATE="$ROOT/plugin_src/plugin_template"
 
+          test -d "$TEMPLATE"
+          mkdir -p "$TEMPLATE/include"
+
           find "$ROOT/plugin_src" -mindepth 1 -maxdepth 1 -type d ! -name plugin_template -exec rm -rf {} +
 
           cp source/main.c "$TEMPLATE/source/main.c"
+          cp source/pad.h "$TEMPLATE/include/pad.h"
+          cp source/config.h "$TEMPLATE/include/config.h"
 
-          sed -i 's/-lSceSysmodule$/-lSceSysmodule -lScePad -lSceUserService/' "$TEMPLATE/Makefile"
+          sed -i 's/-lSceSysmodule/-lSceSysmodule -lScePad -lSceUserService/' "$TEMPLATE/Makefile"
 
           grep 'LIBS :=' "$TEMPLATE/Makefile"
 
@@ -64,14 +64,11 @@ jobs:
         run: |
           make -C "$RUNNER_TEMP/GoldHEN_Plugins"
 
-          find "$RUNNER_TEMP/GoldHEN_Plugins/bin/plugins/prx_final" -name "*.prx" -type f
-
-          test -f "$RUNNER_TEMP/GoldHEN_Plugins/bin/plugins/prx_final/DaysGoneSpawner.prx"
-
       - name: Salvar plugin
         uses: actions/upload-artifact@v4
         with:
-          name: DaysGoneSpawner-PRX
-          path: ${{ runner.temp }}/GoldHEN_Plugins/bin/plugins/prx_final/DaysGoneSpawner.prx
+          name: DaysGoneSpawner
+          path: |
+            ${{ runner.temp }}/GoldHEN_Plugins/bin/plugins/prx_final/DaysGoneSpawner.prx
           if-no-files-found: error
           
