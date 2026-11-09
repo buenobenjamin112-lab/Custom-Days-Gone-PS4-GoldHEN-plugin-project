@@ -1,3 +1,4 @@
+
 name: Build DaysGoneSpawner
 
 on:
@@ -11,9 +12,45 @@ jobs:
       - name: Baixar projeto
         uses: actions/checkout@v4
 
-      - name: Verificar arquivos
+      - name: Instalar dependencias
         run: |
-          echo "Verificando projeto..."
-          ls -R
-          test -f source/main.c
-          echo "Arquivo main.c encontrado!"
+          sudo apt-get update
+          sudo apt-get install -y clang lld llvm make curl jq tar git
+
+      - name: Baixar OpenOrbis
+        run: |
+          VERSION=v0.5.4
+          URL="https://api.github.com/repos/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/tags/$VERSION"
+
+          curl -fsSL "$URL" -o release.json
+
+          DOWNLOAD=$(jq -r '.assets[] | select(.name == "v0.5.4.tar.gz") | .browser_download_url' release.json)
+
+          if [ -z "$DOWNLOAD" ]; then
+            echo "Pacote Linux nao encontrado."
+            jq -r '.assets[].name' release.json
+            exit 1
+          fi
+
+          mkdir -p "$RUNNER_TEMP/OpenOrbis"
+          curl -fL "$DOWNLOAD" -o toolchain.tar.gz
+          tar -xzf toolchain.tar.gz -C "$RUNNER_TEMP/OpenOrbis"
+
+          echo "OO_PS4_TOOLCHAIN=$RUNNER_TEMP/OpenOrbis" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/OpenOrbis/bin/linux" >> "$GITHUB_PATH"
+
+      - name: Baixar GoldHEN SDK
+        run: |
+          git clone --depth 1 https://github.com/GoldHEN/GoldHEN_Plugins_SDK.git "$RUNNER_TEMP/GoldHEN_SDK"
+          echo "GOLDHEN_SDK=$RUNNER_TEMP/GoldHEN_SDK" >> "$GITHUB_ENV"
+
+      - name: Compilar biblioteca GoldHEN
+        run: |
+          make -C "$RUNNER_TEMP/GoldHEN_SDK"
+          ls -lh "$RUNNER_TEMP/GoldHEN_SDK/libGoldHEN_Hook.a"
+
+      - name: Salvar biblioteca compilada
+        uses: actions/upload-artifact@v4
+        with:
+          name: GoldHEN-SDK-Library
+          path: ${{ runner.temp }}/GoldHEN_SDK/libGoldHEN_Hook.a
