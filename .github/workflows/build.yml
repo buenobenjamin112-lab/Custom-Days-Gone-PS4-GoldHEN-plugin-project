@@ -24,20 +24,20 @@ jobs:
 
           curl -fsSL "$URL" -o release.json
 
-          DOWNLOAD=$(jq -r '.assets[] | select(.name == "v0.5.4.tar.gz") | .browser_download_url' release.json)
+          DOWNLOAD=$(jq -r '.assets[] | select(.name == "toolchain-llvm-18.tar.gz") | .browser_download_url' release.json)
 
-          if [ -z "$DOWNLOAD" ]; then
-            echo "Pacote Linux nao encontrado."
+          if [ -z "$DOWNLOAD" ] || [ "$DOWNLOAD" = "null" ]; then
+            echo "Erro: pacote OpenOrbis nao encontrado."
             jq -r '.assets[].name' release.json
             exit 1
           fi
 
-          mkdir -p "$RUNNER_TEMP/OpenOrbis"
+          mkdir -p "$RUNNER_TEMP/oo"
           curl -fL "$DOWNLOAD" -o toolchain.tar.gz
-          tar -xzf toolchain.tar.gz -C "$RUNNER_TEMP/OpenOrbis"
+          tar -xzf toolchain.tar.gz --strip-components=2 -C "$RUNNER_TEMP/oo"
 
-          echo "OO_PS4_TOOLCHAIN=$RUNNER_TEMP/OpenOrbis" >> "$GITHUB_ENV"
-          echo "$RUNNER_TEMP/OpenOrbis/bin/linux" >> "$GITHUB_PATH"
+          echo "OO_PS4_TOOLCHAIN=$RUNNER_TEMP/oo" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/oo/bin/linux" >> "$GITHUB_PATH"
 
       - name: Baixar GoldHEN SDK
         run: |
@@ -54,3 +54,4 @@ jobs:
         with:
           name: GoldHEN-SDK-Library
           path: ${{ runner.temp }}/GoldHEN_SDK/libGoldHEN_Hook.a
+          
