@@ -1,0 +1,19 @@
+name: Build DaysGoneSpawner
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+
+      - name: Verificar arquivos
+        run: |
+          echo "Verificando projeto..."
+          ls -R
+          test -f source/main.c
+          echo "Arquivo main.c encontrado!"
