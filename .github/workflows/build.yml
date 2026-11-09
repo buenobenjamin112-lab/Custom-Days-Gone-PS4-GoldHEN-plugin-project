@@ -19,23 +19,14 @@ jobs:
 
       - name: Baixar OpenOrbis
         run: |
-          VERSION=v0.5.4
-          URL="https://api.github.com/repos/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/tags/$VERSION"
-
+          URL="https://api.github.com/repos/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/tags/v0.5.4"
           curl -fsSL "$URL" -o release.json
-
           DOWNLOAD=$(jq -r '.assets[] | select(.name == "toolchain-llvm-18.tar.gz") | .browser_download_url' release.json)
-
-          if [ -z "$DOWNLOAD" ] || [ "$DOWNLOAD" = "null" ]; then
-            echo "Erro: pacote OpenOrbis nao encontrado."
-            jq -r '.assets[].name' release.json
-            exit 1
-          fi
-
+          test -n "$DOWNLOAD"
+          test "$DOWNLOAD" != "null"
           mkdir -p "$RUNNER_TEMP/oo"
           curl -fL "$DOWNLOAD" -o toolchain.tar.gz
           tar -xzf toolchain.tar.gz --strip-components=2 -C "$RUNNER_TEMP/oo"
-
           echo "OO_PS4_TOOLCHAIN=$RUNNER_TEMP/oo" >> "$GITHUB_ENV"
           echo "$RUNNER_TEMP/oo/bin/linux" >> "$GITHUB_PATH"
 
@@ -43,15 +34,28 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/GoldHEN/GoldHEN_Plugins_SDK.git "$RUNNER_TEMP/GoldHEN_SDK"
           echo "GOLDHEN_SDK=$RUNNER_TEMP/GoldHEN_SDK" >> "$GITHUB_ENV"
-
-      - name: Compilar biblioteca GoldHEN
-        run: |
           make -C "$RUNNER_TEMP/GoldHEN_SDK"
-          ls -lh "$RUNNER_TEMP/GoldHEN_SDK/libGoldHEN_Hook.a"
 
-      - name: Salvar biblioteca compilada
+      - name: Baixar estrutura oficial de plugins
+        run: |
+          git clone --recurse-submodules --depth 1 https://github.com/GoldHEN/GoldHEN_Plugins_Repository.git "$RUNNER_TEMP/GoldHEN_Plugins"
+
+      - name: Preparar plugin
+        run: |
+          test -f source/main.c
+          find "$RUNNER_TEMP/GoldHEN_Plugins/plugin_src" -mindepth 1 -maxdepth 1 -type d ! -name plugin_template -exec rm -rf {} +
+          cp source/main.c "$RUNNER_TEMP/GoldHEN_Plugins/plugin_src/plugin_template/source/main.c"
+
+      - name: Compilar PRX
+        run: |
+          make -C "$RUNNER_TEMP/GoldHEN_Plugins"
+          find "$RUNNER_TEMP/GoldHEN_Plugins/bin/plugins/prx_final" -name "*.prx" -type f
+          test -n "$(find "$RUNNER_TEMP/GoldHEN_Plugins/bin/plugins/prx_final" -name "*.prx" -type f -print -quit)"
+
+      - name: Salvar plugin PRX
         uses: actions/upload-artifact@v4
         with:
-          name: GoldHEN-SDK-Library
-          path: ${{ runner.temp }}/GoldHEN_SDK/libGoldHEN_Hook.a
+          name: DaysGoneSpawner-PRX
+          path: ${{ runner.temp }}/GoldHEN_Plugins/bin/plugins/prx_final/*.prx
+          if-no-files-found: error
           
