@@ -2,122 +2,172 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <unistd.h>
-#include <Common.h>
-#include <orbis/Pad.h>
-#include <orbis/UserService.h>
-#include "plugin_common.h"
+#include <stdlib.h>
+#include <string.h>
 
-attr_public const char *g_pluginName = "DaysGoneSpawner";
-attr_public const char *g_pluginDesc = "Days Gone Spawner";
-attr_public const char *g_pluginAuth = "Custom";
+#include "plugin_common.h"
+#include "Common.h"
+#include <Patcher.h>
+#include "pad.h"
+
+attr_public const char* g_pluginName = "DaysGoneSpawner";
+attr_public const char* g_pluginDesc = "Days Gone Controller Hook";
+attr_public const char* g_pluginAuth = "Custom";
 attr_public uint32_t g_pluginVersion = 0x00000100;
 
-static volatile bool running = false;
-static bool menu_open = false;
-static OrbisPthread input_thread;
+HOOK_INIT(scePadRead);
+HOOK_INIT(scePadReadState);
 
-static int get_pad_handle(void)
+static Patcher* readPatcher = NULL;
+static Patcher* readStatePatcher = NULL;
+
+static volatile bool menuOpen = false;
+static volatile bool previousCombo = false;
+
+static void process_menu_input(ScePadData* data)
 {
-    int user_id = 0;
-    OrbisUserServiceInitializeParams params = {0};
-    params.priority = ORBIS_KERNEL_PRIO_FIFO_LOWEST;
+    if (data == NULL)
+        return;
 
-    sceUserServiceInitialize(&params);
+    const uint32_t combo =
+        SCE_PAD_BUTTON_R1 | SCE_PAD_BUTTON_SQUARE;
 
-    if (sceUserServiceGetInitialUser(&user_id) < 0)
-        return 0;
+    bool pressed = (data->buttons & combo) == combo;
 
-    int handle = scePadOpen(user_id, 0, 0, 0);
-
-    if (handle == ORBIS_PAD_ERROR_ALREADY_OPENED)
-        handle = scePadGetHandle(user_id, 0, 0);
-
-    return handle > 0 ? handle : 0;
-}
-
-static void *input_loop(void *arg)
-{
-    (void)arg;
-
-    sleep(3);
-
-    if (scePadInit() < 0)
+    if (pressed && !previousCombo)
     {
-        NotifyStatic(TEX_ICON_SYSTEM, "Erro ao iniciar controle");
-        running = false;
-        return NULL;
+        menuOpen = !menuOpen;
+
+        if (menuOpen)
+            NotifyStatic(TEX_ICON_SYSTEM,
+                         "DaysGoneSpawner: menu aberto");
+        else
+            NotifyStatic(TEX_ICON_SYSTEM,
+                         "DaysGoneSpawner: menu fechado");
     }
 
-    int handle = get_pad_handle();
-    bool previous = false;
-
-    while (running)
-    {
-        OrbisPadData data = {0};
-
-        if (handle > 0 &&
-            scePadReadState(handle, &data) == 0 &&
-            data.connected)
-        {
-            bool pressed =
-                (data.buttons & ORBIS_PAD_BUTTON_R1) &&
-                (data.buttons & ORBIS_PAD_BUTTON_SQUARE);
-
-            if (pressed && !previous)
-            {
-                menu_open = !menu_open;
-
-                if (menu_open)
-                    NotifyStatic(TEX_ICON_SYSTEM, "DaysGoneSpawner: menu aberto");
-                else
-                    NotifyStatic(TEX_ICON_SYSTEM, "DaysGoneSpawner: menu fechado");
-            }
-
-            previous = pressed;
-        }
-
-        usleep(50000);
-    }
-
-    return NULL;
+    previousCombo = pressed;
 }
 
-int32_t attr_public plugin_load(int32_t argc, const char *argv[])
+int32_t scePadRead_hook(
+    int32_t handle,
+    ScePadData* data,
+    int32_t count)
+{
+    int ret = scePadReadExt(handle, data, count);
+
+    if (ret <= 0 || data == NULL)
+        return ret;
+
+    for (int i = 0; i < ret; i++)
+        process_menu_input(&data[i]);
+
+    return ret;
+}
+
+int32_t scePadReadState_hook(
+    int32_t handle,
+    ScePadData* data)
+{
+    int ret = scePadReadStateExt(handle, data);
+
+    if (ret != 0 || data == NULL)
+        return ret;
+
+    process_menu_input(data);
+
+    return ret;
+}
+
+s32 attr_public plugin_load(s32 argc, const char* argv[])
 {
     (void)argc;
     (void)argv;
 
-    running = true;
+    NotifyStatic(TEX_ICON_SYSTEM,
+                 "DaysGoneSpawner iniciado");
 
-    NotifyStatic(TEX_ICON_SYSTEM, "DaysGoneSpawner iniciado");
-
-    scePthreadCreate(
-        &input_thread,
-        NULL,
-        input_loop,
-        NULL,
-        "DaysGoneSpawnerInput"
+    char module[256];
+    snprintf(
+        module,
+        sizeof(module),
+        "/%s/common/lib/libScePad.sprx",
+        sceKernelGetFsSandboxRandomWord()
     );
 
+    int handle = 0;
+    sys_dynlib_load_prx(module, &handle);
+
+    readPatcher = malloc(sizeof(Patcher));
+    readStatePatcher = malloc(sizeof(Patcher));
+
+    if (!readPatcher || !readStatePatcher)
+        return -1;
+
+    Patcher_Construct(readPatcher);
+    Patcher_Construct(readStatePatcher);
+
+    uint8_t patchRead[5] =
+        {0x31, 0xC9, 0x90, 0x90, 0x90};
+
+    uint8_t patchReadState[5] =
+        {0x31, 0xD2, 0x90, 0x90, 0x90};
+
+    Patcher_Install_Patch(
+        readPatcher,
+        (uint64_t)scePadReadExt,
+        patchRead,
+        sizeof(patchRead)
+    );
+
+    Patcher_Install_Patch(
+        readStatePatcher,
+        (uint64_t)scePadReadStateExt,
+        patchReadState,
+        sizeof(patchReadState)
+    );
+
+    HOOK32(scePadRead);
+    HOOK32(scePadReadState);
+
     return 0;
 }
 
-int32_t attr_public plugin_unload(int32_t argc, const char *argv[])
+s32 attr_public plugin_unload(s32 argc, const char* argv[])
 {
     (void)argc;
     (void)argv;
 
-    running = false;
+    UNHOOK(scePadRead);
+    UNHOOK(scePadReadState);
+
+    if (readPatcher)
+    {
+        Patcher_Destroy(readPatcher);
+        free(readPatcher);
+        readPatcher = NULL;
+    }
+
+    if (readStatePatcher)
+    {
+        Patcher_Destroy(readStatePatcher);
+        free(readStatePatcher);
+        readStatePatcher = NULL;
+    }
+
     return 0;
 }
 
-s32 attr_module_hidden module_start(s64 argc, const void *args)
+s32 attr_module_hidden module_start(s64 argc, const void* args)
 {
+    (void)argc;
+    (void)args;
     return 0;
 }
 
-s32 attr_module_hidden module_stop(s64 argc, const void *args)
+s32 attr_module_hidden module_stop(s64 argc, const void* args)
 {
+    (void)argc;
+    (void)args;
     return 0;
 }
