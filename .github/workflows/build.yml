@@ -1,74 +1,14 @@
-
-name: Build Days Gone Plugin
-
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Baixar projeto
-        uses: actions/checkout@v4
-
       - name: Instalar dependencias
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential clang llvm lld make git wget
-
-      - name: Baixar OpenOrbis
-        run: |
-          git clone --depth 1 https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain.git "$RUNNER_TEMP/OpenOrbis"
-          echo "OO_PS4_TOOLCHAIN=$RUNNER_TEMP/OpenOrbis" >> "$GITHUB_ENV"
-
-      - name: Baixar GoldHEN SDK
-        run: |
-          git clone --depth 1 https://github.com/GoldHEN/GoldHEN_Plugins_SDK.git "$RUNNER_TEMP/GoldHEN_SDK"
-          echo "GOLDHEN_SDK=$RUNNER_TEMP/GoldHEN_SDK" >> "$GITHUB_ENV"
-
-      - name: Baixar estrutura oficial
-        run: |
-          git clone --depth 1 https://github.com/GoldHEN/GoldHEN_Plugins.git "$RUNNER_TEMP/GoldHEN_Plugins"
-
-      - name: Preparar plugin
-        run: |
-          set -e
-
-          test -f source/main.c
-          test -f source/pad.h
-          test -f source/config.h
-
-          ROOT="$RUNNER_TEMP/GoldHEN_Plugins"
-          TEMPLATE="$ROOT/plugin_src/plugin_template"
-
-          test -d "$TEMPLATE"
-          mkdir -p "$TEMPLATE/include"
-
-          find "$ROOT/plugin_src" -mindepth 1 -maxdepth 1 -type d ! -name plugin_template -exec rm -rf {} +
-
-          cp source/main.c "$TEMPLATE/source/main.c"
-          cp source/pad.h "$TEMPLATE/include/pad.h"
-          cp source/config.h "$TEMPLATE/include/config.h"
-
-          sed -i 's/-lSceSysmodule/-lSceSysmodule -lScePad -lSceUserService/' "$TEMPLATE/Makefile"
-
-          grep 'LIBS :=' "$TEMPLATE/Makefile"
-
-          mv "$TEMPLATE" "$ROOT/plugin_src/DaysGoneSpawner"
-
-      - name: Compilar PRX
-        run: |
-          make -C "$RUNNER_TEMP/GoldHEN_Plugins"
-
-      - name: Salvar plugin
-        uses: actions/upload-artifact@v4
-        with:
-          name: DaysGoneSpawner
-          path: |
-            ${{ runner.temp }}/GoldHEN_Plugins/bin/plugins/prx_final/DaysGoneSpawner.prx
-          if-no-files-found: error
-          
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            llvm \
+            lld \
+            make \
+            git \
+            wget \
+            libc6-dev \
+            linux-libc-dev \
+            gcc-multilib
