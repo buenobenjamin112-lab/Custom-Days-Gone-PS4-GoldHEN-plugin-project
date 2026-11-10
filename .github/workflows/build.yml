@@ -18,40 +18,60 @@ jobs:
       - name: Instalar dependencias
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential clang llvm lld make git wget curl tar p7zip-full
+          sudo apt-get install -y build-essential clang llvm lld cmake git wget curl tar p7zip-full
 
+      # 1. Baixar e testar OpenGNM no PC
+      - name: Baixar OpenGNM
+        uses: actions/checkout@v4
+        with:
+          repository: PS4-OpenGNM/opengnm
+          path: opengnm
+
+      - name: Compilar testes genericos OpenGNM
+        run: |
+          cmake -S opengnm -B opengnm/build-generic \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DOPENGNM_PLATFORM=generic \
+            -DOPENGNM_BUILD_TESTS=ON
+
+          cmake --build opengnm/build-generic --parallel 2
+
+          ctest --test-dir opengnm/build-generic \
+            --output-on-failure
+
+      # 2. Extrair a biblioteca antiga apenas para diagnóstico
       - name: Extrair LibOrbisRender
         run: |
           if [ -f liborbisrender-master.7z ]; then
             mkdir -p "$RUNNER_TEMP/liborbisrender"
-            7z x liborbisrender-master.7z -o"$RUNNER_TEMP/liborbisrender" -y
+            7z x liborbisrender-master.7z \
+              -o"$RUNNER_TEMP/liborbisrender" -y
           fi
 
       - name: Diagnosticar LibOrbisRender
         run: |
           mkdir -p "$RUNNER_TEMP/liborbisrender"
           REPORT="$RUNNER_TEMP/liborbisrender-diagnostic.txt"
+
           {
-            echo "=== Raiz extraida ==="
-            find "$RUNNER_TEMP/liborbisrender" -maxdepth 3 -type d | sort
+            echo "=== Diretorios extraidos ==="
+            find "$RUNNER_TEMP/liborbisrender" \
+              -maxdepth 3 -type d | sort
+
             echo
-            echo "=== Arquivos de build e bibliotecas ==="
+            echo "=== Bibliotecas e arquivos de build ==="
             find "$RUNNER_TEMP/liborbisrender" -type f \( \
               -name 'CMakeLists.txt' -o \
               -name 'Makefile' -o \
-              -name '*.vcxproj' -o \
-              -name '*.sln' -o \
               -name '*.a' -o \
               -name '*.lib' -o \
-              -name '*.o' -o \
-              -name '.gitmodules' \
+              -name '*.vcxproj' \
             \) -print | sort
-            echo
-            echo "=== README encontrados ==="
-            find "$RUNNER_TEMP/liborbisrender" -maxdepth 4 -iname 'README*' -type f -print | sort
+
             echo
             echo "=== Total de arquivos ==="
-            find "$RUNNER_TEMP/liborbisrender" -type f | wc -l
+            find "$RUNNER_TEMP/liborbisrender" \
+              -type f | wc -l
           } | tee "$REPORT"
 
       - name: Salvar diagnostico LibOrbisRender
@@ -62,32 +82,77 @@ jobs:
           path: ${{ runner.temp }}/liborbisrender-diagnostic.txt
           if-no-files-found: warn
 
+      # 3. Preparar OpenOrbis
       - name: Baixar OpenOrbis
         run: |
           mkdir -p "$RUNNER_TEMP/OpenOrbis"
-          curl -fL "https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz" -o "$RUNNER_TEMP/toolchain.tar.gz"
-          tar -xzf "$RUNNER_TEMP/toolchain.tar.gz" -C "$RUNNER_TEMP/OpenOrbis"
+
+          curl -fL \
+            "https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz" \
+            -o "$RUNNER_TEMP/toolchain.tar.gz"
+
+          tar -xzf "$RUNNER_TEMP/toolchain.tar.gz" \
+            -C "$RUNNER_TEMP/OpenOrbis"
 
       - name: Configurar toolchain
         run: |
-          HEADER=$(find "$RUNNER_TEMP/OpenOrbis" -type f -path '*/include/sys/errno.h' -print -quit)
+          HEADER=$(find "$RUNNER_TEMP/OpenOrbis" \
+            -type f -path '*/include/sys/errno.h' \
+            -print -quit)
+
           if [ -z "$HEADER" ]; then
             echo "errno.h nao encontrado"
             exit 1
           fi
+
           ROOT="${HEADER%/include/sys/errno.h}"
+
           echo "OO_PS4_TOOLCHAIN=$ROOT" >> "$GITHUB_ENV"
           echo "$ROOT/bin/linux" >> "$GITHUB_PATH"
 
+      # 4. Compilar OpenGNM para PS4
+      - name: Compilar biblioteca OpenGNM para PS4
+        run: |
+          cmake -S opengnm -B opengnm/build-orbis \
+            -DOPENGNM_PLATFORM=orbis \
+            -DOPENGNM_BUILD_TESTS=OFF \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_C_COMPILER_TARGET=x86_64-ps4-elf \
+            -DCMAKE_SYSROOT="$OO_PS4_TOOLCHAIN" \
+            -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY
+
+          cmake --build opengnm/build-orbis \
+            --parallel 2
+
+          test -f opengnm/build-orbis/libopengnm.a
+
+      - name: Salvar biblioteca OpenGNM
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenGNM-PS4-Library
+          path: |
+            opengnm/build-orbis/libopengnm.a
+            opengnm/include/
+          if-no-files-found: error
+
+      # 5. Preparar SDK GoldHEN
       - name: Baixar GoldHEN SDK
         run: |
-          git clone --depth 1 https://github.com/GoldHEN/GoldHEN_Plugins_SDK.git "$RUNNER_TEMP/GoldHEN_SDK"
-          echo "GOLDHEN_SDK=$RUNNER_TEMP/GoldHEN_SDK" >> "$GITHUB_ENV"
+          git clone --depth 1 \
+            https://github.com/GoldHEN/GoldHEN_Plugins_SDK.git \
+            "$RUNNER_TEMP/GoldHEN_SDK"
+
+          echo "GOLDHEN_SDK=$RUNNER_TEMP/GoldHEN_SDK" \
+            >> "$GITHUB_ENV"
 
       - name: Baixar estrutura GoldHEN
         run: |
-          git clone --depth 1 https://github.com/GoldHEN/GoldHEN_Plugins_Repository.git "$RUNNER_TEMP/GoldHEN_Plugins"
+          git clone --depth 1 \
+            https://github.com/GoldHEN/GoldHEN_Plugins_Repository.git \
+            "$RUNNER_TEMP/GoldHEN_Plugins"
 
+      # 6. Preparar plugin existente
       - name: Preparar plugin C++
         run: |
           set -e
@@ -104,7 +169,9 @@ jobs:
           test -d "$TEMPLATE"
           test -f "$TEMPLATE/Makefile"
 
-          find "$ROOT/plugin_src" -mindepth 1 -maxdepth 1 -type d ! -name plugin_template -exec rm -rf {} +
+          find "$ROOT/plugin_src" \
+            -mindepth 1 -maxdepth 1 -type d \
+            ! -name plugin_template -exec rm -rf {} +
 
           mkdir -p "$TEMPLATE/source"
           mkdir -p "$TEMPLATE/include"
@@ -118,10 +185,14 @@ jobs:
           cp source/pad.h "$TEMPLATE/include/pad.h"
           cp source/menu.hpp "$TEMPLATE/include/menu.hpp"
 
-          sed -i 's/-lSceSysmodule/-lSceSysmodule -lScePad -lSceUserService/' "$TEMPLATE/Makefile"
+          sed -i \
+            's/-lSceSysmodule/-lSceSysmodule -lScePad -lSceUserService/' \
+            "$TEMPLATE/Makefile"
 
-          mv "$TEMPLATE" "$ROOT/plugin_src/DaysGoneSpawner"
+          mv "$TEMPLATE" \
+            "$ROOT/plugin_src/DaysGoneSpawner"
 
+      # 7. Compilar plugin
       - name: Compilar PRX
         run: |
           make -C "$RUNNER_TEMP/GoldHEN_Plugins"
