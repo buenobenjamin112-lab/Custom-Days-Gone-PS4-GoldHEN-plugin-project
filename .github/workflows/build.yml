@@ -1,3 +1,4 @@
+
 name: Build Days Gone Plugin
 
 on:
@@ -169,6 +170,7 @@ jobs:
           test -f source/menu.hpp
           test -f source/pad.h
           test -f source/pad.cpp
+          test -f source/frame_probe.c
 
           ROOT="$RUNNER_TEMP/GoldHEN_Plugins"
           TEMPLATE="$ROOT/plugin_src/plugin_template"
@@ -189,6 +191,7 @@ jobs:
           cp source/main.cpp "$TEMPLATE/source/main.cpp"
           cp source/menu.cpp "$TEMPLATE/source/menu.cpp"
           cp source/pad.cpp "$TEMPLATE/source/pad.cpp"
+          cp source/frame_probe.c "$TEMPLATE/source/frame_probe.c"
           cp source/pad.h "$TEMPLATE/include/pad.h"
           cp source/menu.hpp "$TEMPLATE/include/menu.hpp"
 
@@ -209,3 +212,4 @@ jobs:
           name: DaysGoneSpawner
           path: ${{ runner.temp }}/GoldHEN_Plugins/bin/plugins/prx_final/DaysGoneSpawner.prx
           if-no-files-found: error
+          
