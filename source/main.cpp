@@ -8,59 +8,63 @@
 attr_public const char* g_pluginName = "DaysGoneSpawner";
 attr_public const char* g_pluginDesc = "Days Gone C++ Plugin";
 attr_public const char* g_pluginAuth = "Custom";
-attr_public uint32_t g_pluginVersion = 0x00000106;
+attr_public uint32_t g_pluginVersion = 0x00000107;
 
 extern "C"
 {
+    void FrameProbe_Init(void);
+    void FrameProbe_Shutdown(void);
 
-int32_t attr_public plugin_load(int32_t argc, const char* argv[])
-{
-    (void)argc;
-    (void)argv;
-
-    Menu_Init();
-
-    int result = PadController_Init();
-
-    if (result < 0)
+    int32_t attr_public plugin_load(int32_t argc, const char* argv[])
     {
-        final_printf(
-            "[DaysGoneSpawner] Falha ao instalar hooks: %d\n",
-            result
-        );
+        (void)argc;
+        (void)argv;
 
-        return result;
+        Menu_Init();
+
+        int result = PadController_Init();
+
+        if (result < 0)
+        {
+            final_printf(
+                "[DaysGoneSpawner] Falha ao instalar hooks: %d\n",
+                result
+            );
+
+            return result;
+        }
+
+        FrameProbe_Init();
+
+        final_printf("[DaysGoneSpawner] Plugin iniciado.\n");
+
+        return 0;
     }
 
-    final_printf("[DaysGoneSpawner] Plugin iniciado.\n");
+    int32_t attr_public plugin_unload(int32_t argc, const char* argv[])
+    {
+        (void)argc;
+        (void)argv;
 
-    return 0;
-}
+        FrameProbe_Shutdown();
+        PadController_Shutdown();
 
-int32_t attr_public plugin_unload(int32_t argc, const char* argv[])
-{
-    (void)argc;
-    (void)argv;
+        final_printf("[DaysGoneSpawner] Plugin descarregado.\n");
 
-    PadController_Shutdown();
+        return 0;
+    }
 
-    final_printf("[DaysGoneSpawner] Plugin descarregado.\n");
+    s32 attr_module_hidden module_start(s64 argc, const void* args)
+    {
+        (void)argc;
+        (void)args;
+        return 0;
+    }
 
-    return 0;
-}
-
-s32 attr_module_hidden module_start(s64 argc, const void* args)
-{
-    (void)argc;
-    (void)args;
-    return 0;
-}
-
-s32 attr_module_hidden module_stop(s64 argc, const void* args)
-{
-    (void)argc;
-    (void)args;
-    return 0;
-}
-
+    s32 attr_module_hidden module_stop(s64 argc, const void* args)
+    {
+        (void)argc;
+        (void)args;
+        return 0;
+    }
 }
