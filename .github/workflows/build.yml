@@ -1,4 +1,3 @@
-
 name: Build Days Gone Plugin
 
 on:
@@ -20,69 +19,66 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential clang llvm lld make git wget curl tar p7zip-full
 
-      - name: Extrair e inspecionar LibOrbisRender
+      - name: Extrair LibOrbisRender
         run: |
-          set -e
-          test -f liborbisrender-master.7z
-          mkdir -p "$RUNNER_TEMP/liborbisrender"
-          7z x liborbisrender-master.7z -o"$RUNNER_TEMP/liborbisrender" -y
-          echo "Conteudo extraido:"
-          find "$RUNNER_TEMP/liborbisrender" -maxdepth 4 -type f | sort | head -200
-          echo "Total de arquivos:"
-          find "$RUNNER_TEMP/liborbisrender" -type f | wc -l
+          if [ -f liborbisrender-master.7z ]; then
+            mkdir -p "$RUNNER_TEMP/liborbisrender"
+            7z x liborbisrender-master.7z -o"$RUNNER_TEMP/liborbisrender" -y
+          fi
 
-      - name: Baixar OpenOrbis completo
+      - name: Baixar OpenOrbis
         run: |
           mkdir -p "$RUNNER_TEMP/OpenOrbis"
           curl -fL "https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz" -o "$RUNNER_TEMP/toolchain.tar.gz"
           tar -xzf "$RUNNER_TEMP/toolchain.tar.gz" -C "$RUNNER_TEMP/OpenOrbis"
 
-      - name: Verificar OpenOrbis
+      - name: Configurar toolchain
         run: |
           HEADER=$(find "$RUNNER_TEMP/OpenOrbis" -type f -path '*/include/sys/errno.h' -print -quit)
           if [ -z "$HEADER" ]; then
             echo "errno.h nao encontrado"
-            find "$RUNNER_TEMP/OpenOrbis" -maxdepth 6 -type d
             exit 1
           fi
           ROOT="${HEADER%/include/sys/errno.h}"
           echo "OO_PS4_TOOLCHAIN=$ROOT" >> "$GITHUB_ENV"
           echo "$ROOT/bin/linux" >> "$GITHUB_PATH"
-          echo "Toolchain encontrada: $ROOT"
 
       - name: Baixar GoldHEN SDK
         run: |
           git clone --depth 1 https://github.com/GoldHEN/GoldHEN_Plugins_SDK.git "$RUNNER_TEMP/GoldHEN_SDK"
           echo "GOLDHEN_SDK=$RUNNER_TEMP/GoldHEN_SDK" >> "$GITHUB_ENV"
 
-      - name: Baixar estrutura oficial
+      - name: Baixar estrutura GoldHEN
         run: |
-          git clone --depth 1 https://github.com/GoldHEN/GoldHEN_Plugins.git "$RUNNER_TEMP/GoldHEN_Plugins"
+          git clone --depth 1 https://github.com/GoldHEN/GoldHEN_Plugins_Repository.git "$RUNNER_TEMP/GoldHEN_Plugins"
 
-      - name: Preparar plugin
+      - name: Preparar plugin C++
         run: |
           set -e
 
-          test -f source/main.c
+          test -f source/main.cpp
+          test -f source/menu.cpp
+          test -f source/menu.hpp
           test -f source/pad.h
-          test -f source/config.h
-          test -f source/menu.h
-          test -f source/menu.c
 
           ROOT="$RUNNER_TEMP/GoldHEN_Plugins"
           TEMPLATE="$ROOT/plugin_src/plugin_template"
 
           test -d "$TEMPLATE"
+          test -f "$TEMPLATE/Makefile"
 
           find "$ROOT/plugin_src" -mindepth 1 -maxdepth 1 -type d ! -name plugin_template -exec rm -rf {} +
 
+          mkdir -p "$TEMPLATE/source"
           mkdir -p "$TEMPLATE/include"
 
-          cp source/main.c "$TEMPLATE/source/main.c"
-          cp source/menu.c "$TEMPLATE/source/menu.c"
+          rm -f "$TEMPLATE/source/main.c"
+          rm -f "$TEMPLATE/source/menu.c"
+
+          cp source/main.cpp "$TEMPLATE/source/main.cpp"
+          cp source/menu.cpp "$TEMPLATE/source/menu.cpp"
           cp source/pad.h "$TEMPLATE/include/pad.h"
-          cp source/config.h "$TEMPLATE/include/config.h"
-          cp source/menu.h "$TEMPLATE/include/menu.h"
+          cp source/menu.hpp "$TEMPLATE/include/menu.hpp"
 
           sed -i 's/-lSceSysmodule/-lSceSysmodule -lScePad -lSceUserService/' "$TEMPLATE/Makefile"
 
@@ -98,4 +94,3 @@ jobs:
           name: DaysGoneSpawner
           path: ${{ runner.temp }}/GoldHEN_Plugins/bin/plugins/prx_final/DaysGoneSpawner.prx
           if-no-files-found: error
-          
