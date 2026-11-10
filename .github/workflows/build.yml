@@ -18,12 +18,21 @@ jobs:
       - name: Instalar dependencias
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential clang llvm lld make git wget libc6-dev linux-libc-dev
+          sudo apt-get install -y build-essential clang llvm lld make git wget curl tar
 
-      - name: Baixar OpenOrbis
+      - name: Baixar OpenOrbis completo
         run: |
-          git clone --depth 1 https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain.git "$RUNNER_TEMP/OpenOrbis"
+          mkdir -p "$RUNNER_TEMP/OpenOrbis"
+          curl -fL "https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz" -o "$RUNNER_TEMP/toolchain.tar.gz"
+          tar -xzf "$RUNNER_TEMP/toolchain.tar.gz" -C "$RUNNER_TEMP/OpenOrbis"
           echo "OO_PS4_TOOLCHAIN=$RUNNER_TEMP/OpenOrbis" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/OpenOrbis/bin/linux" >> "$GITHUB_PATH"
+
+      - name: Verificar OpenOrbis
+        run: |
+          test -f "$OO_PS4_TOOLCHAIN/include/errno.h"
+          test -d "$OO_PS4_TOOLCHAIN/lib"
+          echo "OpenOrbis configurado"
 
       - name: Baixar GoldHEN SDK
         run: |
@@ -37,7 +46,6 @@ jobs:
       - name: Preparar plugin
         run: |
           set -e
-
           test -f source/main.c
           test -f source/pad.h
           test -f source/config.h
@@ -69,3 +77,4 @@ jobs:
           name: DaysGoneSpawner
           path: ${{ runner.temp }}/GoldHEN_Plugins/bin/plugins/prx_final/DaysGoneSpawner.prx
           if-no-files-found: error
+          
