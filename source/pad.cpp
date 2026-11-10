@@ -1,71 +1,104 @@
+
 #include "pad.h"
 #include "menu.hpp"
 
-#include <orbis/libkernel.h>
-#include <orbis/_types/pad.h>
-#include <orbis/_types/user.h>
+#include <stdint.h>
+#include <orbis/Pad.h>
+#include <Detour.h>
 
-static int g_padHandle = -1;
-static OrbisPthread g_padThread;
-static volatile bool g_padRunning = false;
-static bool g_padThreadCreated = false;
+static Detour g_readDetour;
+static Detour g_readStateDetour;
 
+static bool g_initialized = false;
 static uint32_t g_previousButtons = 0;
+static bool g_previousCombo = false;
 
-static bool ButtonPressed(uint32_t buttons, uint32_t button)
+typedef int32_t (*PadReadFn)(
+    int32_t,
+    OrbisPadData*,
+    int32_t
+);
+
+typedef int32_t (*PadReadStateFn)(
+    int32_t,
+    OrbisPadData*
+);
+
+static PadReadFn g_originalRead = nullptr;
+static PadReadStateFn g_originalReadState = nullptr;
+
+static void ProcessMenuInput(OrbisPadData* data)
 {
-    return (buttons & button) && !(g_previousButtons & button);
-}
+    if (!data)
+        return;
 
-static void* PadThread(void* arg)
-{
-    (void)arg;
+    uint32_t buttons = data->buttons;
 
-    OrbisPadData data = {};
+    const uint32_t combo =
+        ORBIS_PAD_BUTTON_R1 |
+        ORBIS_PAD_BUTTON_SQUARE;
 
-    while (g_padRunning)
+    bool comboPressed = (buttons & combo) == combo;
+
+    if (comboPressed && !g_previousCombo)
+        Menu_Toggle();
+
+    g_previousCombo = comboPressed;
+
+    if (Menu_IsVisible())
     {
-        if (g_padHandle >= 0 &&
-            scePadReadState(g_padHandle, &data) == 0 &&
-            data.connected)
-        {
-            uint32_t buttons = data.buttons;
+        if ((buttons & ORBIS_PAD_BUTTON_UP) &&
+            !(g_previousButtons & ORBIS_PAD_BUTTON_UP))
+            Menu_Move(-1);
 
-            const uint32_t menuShortcut =
-                ORBIS_PAD_BUTTON_OPTIONS |
-                ORBIS_PAD_BUTTON_L3 |
-                ORBIS_PAD_BUTTON_R3 |
-                ORBIS_PAD_BUTTON_L1 |
-                ORBIS_PAD_BUTTON_R1;
+        if ((buttons & ORBIS_PAD_BUTTON_DOWN) &&
+            !(g_previousButtons & ORBIS_PAD_BUTTON_DOWN))
+            Menu_Move(1);
 
-            if ((buttons & menuShortcut) == menuShortcut &&
-                (g_previousButtons & menuShortcut) != menuShortcut)
-            {
-                Menu_Toggle();
-            }
+        if ((buttons & ORBIS_PAD_BUTTON_CROSS) &&
+            !(g_previousButtons & ORBIS_PAD_BUTTON_CROSS))
+            Menu_Select();
 
-            if (Menu_IsVisible())
-            {
-                if (ButtonPressed(buttons, ORBIS_PAD_BUTTON_UP))
-                    Menu_Move(-1);
-
-                if (ButtonPressed(buttons, ORBIS_PAD_BUTTON_DOWN))
-                    Menu_Move(1);
-
-                if (ButtonPressed(buttons, ORBIS_PAD_BUTTON_CROSS))
-                    Menu_Select();
-
-                if (ButtonPressed(buttons, ORBIS_PAD_BUTTON_CIRCLE))
-                    Menu_Toggle();
-            }
-
-            g_previousButtons = buttons;
-        }
-
-        sceKernelUsleep(20000);
+        if ((buttons & ORBIS_PAD_BUTTON_CIRCLE) &&
+            !(g_previousButtons & ORBIS_PAD_BUTTON_CIRCLE))
+            Menu_Toggle();
     }
 
-    return 0;
+    g_previousButtons = buttons;
+}
+
+static int32_t PadReadHook(
+    int32_t handle,
+    OrbisPadData* data,
+    int32_t count)
+{
+    if (!g_originalRead)
+        return -1;
+
+    int32_t result = g_originalRead(handle, data, count);
+
+    if (result > 0 && data)
+    {
+        for (int32_t i = 0; i < result; i++)
+            ProcessMenuInput(&data[i]);
+    }
+
+    return result;
+}
+
+static int32_t PadReadStateHook(
+    int32_t handle,
+    OrbisPadData* data)
+{
+    if (!g_originalReadState)
+        return -1;
+
+    int32_t result = g_originalReadState(handle, data);
+
+    if (result == 0 && data)
+        ProcessMenuInput(data);
+
+    return result;
 }
 
 extern "C"
@@ -73,87 +106,84 @@ extern "C"
 
 int PadController_Init(void)
 {
-    if (g_padThreadCreated)
+    if (g_initialized)
         return 0;
 
-    int result = scePadInit();
-
-    if (result < 0)
-        return result;
-
-    OrbisUserServiceInitializeParams params = {};
-    params.priority = ORBIS_KERNEL_PRIO_FIFO_LOWEST;
-
-    result = sceUserServiceInitialize(&params);
-
-    if (result < 0)
-        return result;
-
-    int userID = -1;
-
-    result = sceUserServiceGetInitialUser(&userID);
-
-    if (result < 0)
-        return result;
-
-    g_padHandle = scePadOpen(userID, 0, 0, 0);
-
-    if (g_padHandle < 0)
-        return g_padHandle;
-
     g_previousButtons = 0;
-    g_padRunning = true;
+    g_previousCombo = false;
 
-    result = scePthreadCreate(
-        &g_padThread,
-        NULL,
-        PadThread,
-        NULL,
-        "DaysGonePad"
+    Detour_Construct(&g_readDetour, DetourMode_x32);
+
+    void* readStub = Detour_DetourFunction(
+        &g_readDetour,
+        (uint64_t)scePadRead,
+        (void*)PadReadHook
     );
 
-    if (result != 0)
+    if (!readStub)
     {
-        g_padRunning = false;
-        scePadClose(g_padHandle);
-        g_padHandle = -1;
-        return result;
+        final_printf("[DaysGoneSpawner] Falha no hook scePadRead.\n");
+        return -1;
     }
 
-    g_padThreadCreated = true;
+    g_originalRead = (PadReadFn)readStub;
+
+    Detour_Construct(&g_readStateDetour, DetourMode_x32);
+
+    void* stateStub = Detour_DetourFunction(
+        &g_readStateDetour,
+        (uint64_t)scePadReadState,
+        (void*)PadReadStateHook
+    );
+
+    if (!stateStub)
+    {
+        final_printf("[DaysGoneSpawner] Falha no hook scePadReadState.\n");
+
+        Detour_Destroy(&g_readDetour);
+        g_originalRead = nullptr;
+        return -2;
+    }
+
+    g_originalReadState = (PadReadStateFn)stateStub;
+
+    g_initialized = true;
+
+    final_printf("[DaysGoneSpawner] Hooks do controle instalados.\n");
+
     return 0;
 }
 
 void PadController_Update(void)
 {
-    // A leitura do controle acontece na thread.
+    // A leitura é realizada pelo próprio jogo.
 }
 
 void PadController_Shutdown(void)
 {
-    g_padRunning = false;
+    if (!g_initialized)
+        return;
 
-    if (g_padThreadCreated)
-    {
-        scePthreadJoin(g_padThread, NULL);
-        g_padThreadCreated = false;
-    }
+    Detour_Destroy(&g_readStateDetour);
+    Detour_Destroy(&g_readDetour);
 
-    if (g_padHandle >= 0)
-    {
-        scePadClose(g_padHandle);
-        g_padHandle = -1;
-    }
+    g_originalRead = nullptr;
+    g_originalReadState = nullptr;
+
+    g_previousButtons = 0;
+    g_previousCombo = false;
+
+    g_initialized = false;
 }
 
 int PadController_IsReady(void)
 {
-    return g_padThreadCreated ? 1 : 0;
+    return g_initialized ? 1 : 0;
 }
 
 int PadController_IsConnected(void)
 {
-    return g_padHandle >= 0 ? 1 : 0;
+    return g_initialized ? 1 : 0;
 }
 
 uint32_t PadController_GetButtons(void)
