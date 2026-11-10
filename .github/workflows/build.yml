@@ -196,7 +196,7 @@ jobs:
           cp source/menu.hpp "$TEMPLATE/include/menu.hpp"
 
           sed -i \
-            's/-lSceSysmodule/-lSceSysmodule -lScePad -lSceUserService/' \
+            's/-lSceSysmodule/-lSceSysmodule -lScePad -lSceUserService -lSceGnmDriver/' \
             "$TEMPLATE/Makefile"
 
           mv "$TEMPLATE" \
