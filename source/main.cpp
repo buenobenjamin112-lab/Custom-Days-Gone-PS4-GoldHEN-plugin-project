@@ -5,10 +5,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+extern "C" {
 #include "plugin_common.h"
-#include "Common.h"
-#include <Patcher.h>
 #include "pad.h"
+}
+
+#include <Patcher.h>
 #include "menu.hpp"
 
 attr_public const char* g_pluginName = "DaysGoneSpawner";
@@ -31,16 +33,12 @@ static void process_menu_input(ScePadData* data)
         return;
 
     uint32_t buttons = data->buttons;
-
-    uint32_t combo =
-        SCE_PAD_BUTTON_R1 | SCE_PAD_BUTTON_SQUARE;
-
+    uint32_t combo = SCE_PAD_BUTTON_R1 | SCE_PAD_BUTTON_SQUARE;
     bool comboPressed = (buttons & combo) == combo;
 
     if (comboPressed && !previousCombo)
     {
         Menu_Toggle();
-
         NotifyStatic(
             TEX_ICON_SYSTEM,
             Menu_IsVisible()
@@ -105,7 +103,6 @@ s32 attr_public plugin_load(s32 argc, const char* argv[])
     (void)argv;
 
     Menu_Init();
-
     NotifyStatic(TEX_ICON_SYSTEM, "DaysGoneSpawner C++ iniciado");
 
     char module[256];
