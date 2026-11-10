@@ -1,3 +1,4 @@
+
 name: Build Days Gone Plugin
 
 on:
@@ -25,6 +26,41 @@ jobs:
             mkdir -p "$RUNNER_TEMP/liborbisrender"
             7z x liborbisrender-master.7z -o"$RUNNER_TEMP/liborbisrender" -y
           fi
+
+      - name: Diagnosticar LibOrbisRender
+        run: |
+          mkdir -p "$RUNNER_TEMP/liborbisrender"
+          REPORT="$RUNNER_TEMP/liborbisrender-diagnostic.txt"
+          {
+            echo "=== Raiz extraida ==="
+            find "$RUNNER_TEMP/liborbisrender" -maxdepth 3 -type d | sort
+            echo
+            echo "=== Arquivos de build e bibliotecas ==="
+            find "$RUNNER_TEMP/liborbisrender" -type f \( \
+              -name 'CMakeLists.txt' -o \
+              -name 'Makefile' -o \
+              -name '*.vcxproj' -o \
+              -name '*.sln' -o \
+              -name '*.a' -o \
+              -name '*.lib' -o \
+              -name '*.o' -o \
+              -name '.gitmodules' \
+            \) -print | sort
+            echo
+            echo "=== README encontrados ==="
+            find "$RUNNER_TEMP/liborbisrender" -maxdepth 4 -iname 'README*' -type f -print | sort
+            echo
+            echo "=== Total de arquivos ==="
+            find "$RUNNER_TEMP/liborbisrender" -type f | wc -l
+          } | tee "$REPORT"
+
+      - name: Salvar diagnostico LibOrbisRender
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LibOrbisRender-Diagnostic
+          path: ${{ runner.temp }}/liborbisrender-diagnostic.txt
+          if-no-files-found: warn
 
       - name: Baixar OpenOrbis
         run: |
@@ -94,3 +130,4 @@ jobs:
           name: DaysGoneSpawner
           path: ${{ runner.temp }}/GoldHEN_Plugins/bin/plugins/prx_final/DaysGoneSpawner.prx
           if-no-files-found: error
+          
