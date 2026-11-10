@@ -1,6 +1,7 @@
 
 #include "pad.h"
 #include "menu.hpp"
+#include "plugin_common.h"
 
 #include <stdint.h>
 #include <orbis/Pad.h>
@@ -156,7 +157,6 @@ int PadController_Init(void)
 
 void PadController_Update(void)
 {
-    // A leitura é realizada pelo próprio jogo.
 }
 
 void PadController_Shutdown(void)
