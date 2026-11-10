@@ -14,7 +14,7 @@
 attr_public const char* g_pluginName = "DaysGoneSpawner";
 attr_public const char* g_pluginDesc = "Days Gone Menu";
 attr_public const char* g_pluginAuth = "Custom";
-attr_public uint32_t g_pluginVersion = 0x00000101;
+attr_public uint32_t g_pluginVersion = 0x00000102;
 
 HOOK_INIT(scePadRead);
 HOOK_INIT(scePadReadState);
@@ -36,7 +36,14 @@ static void process_menu_input(ScePadData* data)
     bool comboPressed = (buttons & combo) == combo;
 
     if (comboPressed && !previousCombo)
+    {
         Menu_Toggle();
+
+        if (Menu_IsVisible())
+            NotifyStatic(TEX_ICON_SYSTEM, "DaysGoneSpawner: menu aberto");
+        else
+            NotifyStatic(TEX_ICON_SYSTEM, "DaysGoneSpawner: menu fechado");
+    }
 
     previousCombo = comboPressed;
 
