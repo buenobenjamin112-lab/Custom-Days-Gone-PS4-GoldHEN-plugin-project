@@ -9,11 +9,12 @@
 #include "Common.h"
 #include <Patcher.h>
 #include "pad.h"
+#include "menu.h"
 
 attr_public const char* g_pluginName = "DaysGoneSpawner";
-attr_public const char* g_pluginDesc = "Days Gone Controller Hook";
+attr_public const char* g_pluginDesc = "Days Gone Menu";
 attr_public const char* g_pluginAuth = "Custom";
-attr_public uint32_t g_pluginVersion = 0x00000100;
+attr_public uint32_t g_pluginVersion = 0x00000101;
 
 HOOK_INIT(scePadRead);
 HOOK_INIT(scePadReadState);
@@ -21,42 +22,50 @@ HOOK_INIT(scePadReadState);
 static Patcher* readPatcher = NULL;
 static Patcher* readStatePatcher = NULL;
 
-static volatile bool menuOpen = false;
-static volatile bool previousCombo = false;
+static bool previousCombo = false;
+static uint32_t previousButtons = 0;
 
 static void process_menu_input(ScePadData* data)
 {
-    if (data == NULL)
+    if (!data)
         return;
 
-    const uint32_t combo =
-        SCE_PAD_BUTTON_R1 | SCE_PAD_BUTTON_SQUARE;
+    uint32_t buttons = data->buttons;
 
-    bool pressed = (data->buttons & combo) == combo;
+    uint32_t combo = SCE_PAD_BUTTON_R1 | SCE_PAD_BUTTON_SQUARE;
+    bool comboPressed = (buttons & combo) == combo;
 
-    if (pressed && !previousCombo)
+    if (comboPressed && !previousCombo)
+        Menu_Toggle();
+
+    previousCombo = comboPressed;
+
+    if (!Menu_IsVisible())
     {
-        menuOpen = !menuOpen;
-
-        if (menuOpen)
-            NotifyStatic(TEX_ICON_SYSTEM,
-                         "DaysGoneSpawner: menu aberto");
-        else
-            NotifyStatic(TEX_ICON_SYSTEM,
-                         "DaysGoneSpawner: menu fechado");
+        previousButtons = buttons;
+        return;
     }
 
-    previousCombo = pressed;
+    if ((buttons & SCE_PAD_BUTTON_UP) &&
+        !(previousButtons & SCE_PAD_BUTTON_UP))
+        Menu_Move(-1);
+
+    if ((buttons & SCE_PAD_BUTTON_DOWN) &&
+        !(previousButtons & SCE_PAD_BUTTON_DOWN))
+        Menu_Move(1);
+
+    if ((buttons & SCE_PAD_BUTTON_CROSS) &&
+        !(previousButtons & SCE_PAD_BUTTON_CROSS))
+        Menu_Select();
+
+    previousButtons = buttons;
 }
 
-int32_t scePadRead_hook(
-    int32_t handle,
-    ScePadData* data,
-    int32_t count)
+int32_t scePadRead_hook(int32_t handle, ScePadData* data, int32_t count)
 {
     int ret = scePadReadExt(handle, data, count);
 
-    if (ret <= 0 || data == NULL)
+    if (ret <= 0 || !data)
         return ret;
 
     for (int i = 0; i < ret; i++)
@@ -65,17 +74,14 @@ int32_t scePadRead_hook(
     return ret;
 }
 
-int32_t scePadReadState_hook(
-    int32_t handle,
-    ScePadData* data)
+int32_t scePadReadState_hook(int32_t handle, ScePadData* data)
 {
     int ret = scePadReadStateExt(handle, data);
 
-    if (ret != 0 || data == NULL)
+    if (ret != 0 || !data)
         return ret;
 
     process_menu_input(data);
-
     return ret;
 }
 
@@ -84,16 +90,14 @@ s32 attr_public plugin_load(s32 argc, const char* argv[])
     (void)argc;
     (void)argv;
 
-    NotifyStatic(TEX_ICON_SYSTEM,
-                 "DaysGoneSpawner iniciado");
+    Menu_Init();
+
+    NotifyStatic(TEX_ICON_SYSTEM, "DaysGoneSpawner iniciado");
 
     char module[256];
-    snprintf(
-        module,
-        sizeof(module),
+    snprintf(module, sizeof(module),
         "/%s/common/lib/libScePad.sprx",
-        sceKernelGetFsSandboxRandomWord()
-    );
+        sceKernelGetFsSandboxRandomWord());
 
     int handle = 0;
     sys_dynlib_load_prx(module, &handle);
@@ -107,25 +111,14 @@ s32 attr_public plugin_load(s32 argc, const char* argv[])
     Patcher_Construct(readPatcher);
     Patcher_Construct(readStatePatcher);
 
-    uint8_t patchRead[5] =
-        {0x31, 0xC9, 0x90, 0x90, 0x90};
+    uint8_t patchRead[5] = {0x31, 0xC9, 0x90, 0x90, 0x90};
+    uint8_t patchReadState[5] = {0x31, 0xD2, 0x90, 0x90, 0x90};
 
-    uint8_t patchReadState[5] =
-        {0x31, 0xD2, 0x90, 0x90, 0x90};
+    Patcher_Install_Patch(readPatcher,
+        (uint64_t)scePadReadExt, patchRead, sizeof(patchRead));
 
-    Patcher_Install_Patch(
-        readPatcher,
-        (uint64_t)scePadReadExt,
-        patchRead,
-        sizeof(patchRead)
-    );
-
-    Patcher_Install_Patch(
-        readStatePatcher,
-        (uint64_t)scePadReadStateExt,
-        patchReadState,
-        sizeof(patchReadState)
-    );
+    Patcher_Install_Patch(readStatePatcher,
+        (uint64_t)scePadReadStateExt, patchReadState, sizeof(patchReadState));
 
     HOOK32(scePadRead);
     HOOK32(scePadReadState);
