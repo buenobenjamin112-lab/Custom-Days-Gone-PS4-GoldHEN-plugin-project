@@ -20,12 +20,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential clang llvm lld cmake git wget curl tar p7zip-full
 
-      # 1. Baixar e testar OpenGNM no PC
       - name: Baixar OpenGNM
         uses: actions/checkout@v4
         with:
           repository: PS4-OpenGNM/opengnm
           path: opengnm
+
+      - name: Corrigir link da biblioteca matematica
+        run: |
+          sed -i \
+            's/target_link_libraries(opengnm_tests PRIVATE opengnm)/target_link_libraries(opengnm_tests PRIVATE opengnm m)/' \
+            opengnm/CMakeLists.txt
 
       - name: Compilar testes genericos OpenGNM
         run: |
@@ -39,7 +44,6 @@ jobs:
           ctest --test-dir opengnm/build-generic \
             --output-on-failure
 
-      # 2. Extrair a biblioteca antiga apenas para diagnóstico
       - name: Extrair LibOrbisRender
         run: |
           if [ -f liborbisrender-master.7z ]; then
@@ -82,7 +86,6 @@ jobs:
           path: ${{ runner.temp }}/liborbisrender-diagnostic.txt
           if-no-files-found: warn
 
-      # 3. Preparar OpenOrbis
       - name: Baixar OpenOrbis
         run: |
           mkdir -p "$RUNNER_TEMP/OpenOrbis"
@@ -110,7 +113,6 @@ jobs:
           echo "OO_PS4_TOOLCHAIN=$ROOT" >> "$GITHUB_ENV"
           echo "$ROOT/bin/linux" >> "$GITHUB_PATH"
 
-      # 4. Compilar OpenGNM para PS4
       - name: Compilar biblioteca OpenGNM para PS4
         run: |
           cmake -S opengnm -B opengnm/build-orbis \
@@ -136,7 +138,6 @@ jobs:
             opengnm/include/
           if-no-files-found: error
 
-      # 5. Preparar SDK GoldHEN
       - name: Baixar GoldHEN SDK
         run: |
           git clone --depth 1 \
@@ -152,7 +153,6 @@ jobs:
             https://github.com/GoldHEN/GoldHEN_Plugins_Repository.git \
             "$RUNNER_TEMP/GoldHEN_Plugins"
 
-      # 6. Preparar plugin existente
       - name: Preparar plugin C++
         run: |
           set -e
@@ -192,7 +192,6 @@ jobs:
           mv "$TEMPLATE" \
             "$ROOT/plugin_src/DaysGoneSpawner"
 
-      # 7. Compilar plugin
       - name: Compilar PRX
         run: |
           make -C "$RUNNER_TEMP/GoldHEN_Plugins"
