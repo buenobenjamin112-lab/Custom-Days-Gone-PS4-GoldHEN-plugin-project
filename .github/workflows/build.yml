@@ -25,14 +25,20 @@ jobs:
           mkdir -p "$RUNNER_TEMP/OpenOrbis"
           curl -fL "https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz" -o "$RUNNER_TEMP/toolchain.tar.gz"
           tar -xzf "$RUNNER_TEMP/toolchain.tar.gz" -C "$RUNNER_TEMP/OpenOrbis"
-          echo "OO_PS4_TOOLCHAIN=$RUNNER_TEMP/OpenOrbis" >> "$GITHUB_ENV"
-          echo "$RUNNER_TEMP/OpenOrbis/bin/linux" >> "$GITHUB_PATH"
+          find "$RUNNER_TEMP/OpenOrbis" -maxdepth 6 -type f -name errno.h
+          find "$RUNNER_TEMP/OpenOrbis" -maxdepth 6 -type d -name include
 
       - name: Verificar OpenOrbis
         run: |
-          test -f "$OO_PS4_TOOLCHAIN/include/errno.h"
-          test -d "$OO_PS4_TOOLCHAIN/lib"
-          echo "OpenOrbis configurado"
+          HEADER=$(find "$RUNNER_TEMP/OpenOrbis" -type f -name errno.h -print -quit)
+          if [ -z "$HEADER" ]; then
+            echo "Arquivo errno.h nao encontrado"
+            find "$RUNNER_TEMP/OpenOrbis" -maxdepth 5 -type d
+            exit 1
+          fi
+          ROOT="${HEADER%/include/errno.h}"
+          echo "OO_PS4_TOOLCHAIN=$ROOT" >> "$GITHUB_ENV"
+          echo "OpenOrbis encontrado em $ROOT"
 
       - name: Baixar GoldHEN SDK
         run: |
