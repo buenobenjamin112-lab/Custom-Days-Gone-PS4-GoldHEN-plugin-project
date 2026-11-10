@@ -2,8 +2,7 @@
 #ifndef DAYS_GONE_PAD_H
 #define DAYS_GONE_PAD_H
 
-#include <orbis/Pad.h>
-#include <orbis/UserService.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
