@@ -1,7 +1,13 @@
+
 #ifndef _PAD_H
 #define _PAD_H
 
+#include <stdint.h>
 #include <stdbool.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /*
  TOUCH Pad Button
@@ -54,7 +60,7 @@ typedef enum ScePadButtonDataOffset {
     SCE_PAD_BUTTON_CROSS = 0x00004000,
     SCE_PAD_BUTTON_SQUARE = 0x00008000,
     SCE_PAD_BUTTON_TOUCH_PAD = 0x00100000,
-    SCE_PAD_BUTTON_INTERCEPTED = 0x80000000,
+    SCE_PAD_BUTTON_INTERCEPTED = 0x80000000
 } ScePadButtonDataOffset;
 
 typedef enum {
@@ -146,7 +152,7 @@ typedef enum {
     SCE_PAD_DEVICE_CLASS_STEERING_WHEEL = 6,
     SCE_PAD_DEVICE_CLASS_STICK = 7,
     SCE_PAD_DEVICE_CLASS_FLIGHT_STICK = 8,
-    SCE_PAD_DEVICE_CLASS_GUN = 9,
+    SCE_PAD_DEVICE_CLASS_GUN = 9
 } ScePadDeviceClass;
 
 typedef struct ScePadControllerInformation {
@@ -171,5 +177,9 @@ int scePadReadExt(int handle, ScePadData* data, int count);
 int scePadReadStateExt(int handle, ScePadData* data);
 int scePadSetLightBar(int32_t handle, const void* pParam);
 int scePadSetVibration(int32_t handle, const ScePadVibrationParam* pParam);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
