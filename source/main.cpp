@@ -19,7 +19,6 @@ int32_t attr_public plugin_load(int32_t argc, const char* argv[])
     Menu_Init();
 
     final_printf("[DaysGoneSpawner] Plugin iniciado.\n");
-    NotifyStatic(TEX_ICON_SYSTEM, "DaysGoneSpawner iniciado");
 
     return 0;
 }
