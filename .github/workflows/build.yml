@@ -51,9 +51,12 @@ jobs:
       - name: Preparar plugin
         run: |
           set -e
+
           test -f source/main.c
           test -f source/pad.h
           test -f source/config.h
+          test -f source/menu.h
+          test -f source/menu.c
 
           ROOT="$RUNNER_TEMP/GoldHEN_Plugins"
           TEMPLATE="$ROOT/plugin_src/plugin_template"
@@ -65,8 +68,10 @@ jobs:
           mkdir -p "$TEMPLATE/include"
 
           cp source/main.c "$TEMPLATE/source/main.c"
+          cp source/menu.c "$TEMPLATE/source/menu.c"
           cp source/pad.h "$TEMPLATE/include/pad.h"
           cp source/config.h "$TEMPLATE/include/config.h"
+          cp source/menu.h "$TEMPLATE/include/menu.h"
 
           sed -i 's/-lSceSysmodule/-lSceSysmodule -lScePad -lSceUserService/' "$TEMPLATE/Makefile"
 
