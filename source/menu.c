@@ -1,12 +1,12 @@
-
-#include "menu.h"
+#include "menu.hpp"
+#include "plugin_common.h"
 
 #define MENU_OPTION_COUNT 3
 
-static DaysGoneMenu g_menu = {
-    .visible = false,
-    .selected = 0
-};
+static DaysGoneMenu g_menu = { false, 0 };
+
+extern "C"
+{
 
 void Menu_Init(void)
 {
@@ -17,6 +17,21 @@ void Menu_Init(void)
 void Menu_Toggle(void)
 {
     g_menu.visible = !g_menu.visible;
+
+    if (g_menu.visible)
+    {
+        NotifyStatic(
+            TEX_ICON_SYSTEM,
+            "DaysGoneSpawner: menu aberto"
+        );
+    }
+    else
+    {
+        NotifyStatic(
+            TEX_ICON_SYSTEM,
+            "DaysGoneSpawner: menu fechado"
+        );
+    }
 }
 
 void Menu_Move(int direction)
@@ -38,7 +53,7 @@ void Menu_Select(void)
     if (!g_menu.visible)
         return;
 
-    /* As ações serão implementadas posteriormente. */
+    // As ações do menu serão implementadas depois.
 }
 
 bool Menu_IsVisible(void)
@@ -49,4 +64,6 @@ bool Menu_IsVisible(void)
 int Menu_GetSelected(void)
 {
     return g_menu.selected;
+}
+
 }
